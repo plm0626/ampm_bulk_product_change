@@ -19,121 +19,182 @@ include( plugin_dir_path( __FILE__ ) . './includes/debug_class.php');
 
 function bulk_product_change_task() 
 {
+    global $debugOBJ,$total,$proc_success,$proc_fail,$total_parents,$total_variations;
     $categories = array('Frameless','Closets');
+    $total = 0;
+    $proc_success = 0;
+    $proc_fail = 0;
+    $total_parents = 0;
+    $total_variations = 0;
     foreach ($categories as $category) {
         $query = new WC_Product_Query( array(
             'type'  => 'variable',
             'category'  => array($category),
-            'limit' => -1,
+            'limit' => 50,
             'orderby' => 'date',
             'order' => 'DESC',
             'return' => 'ids',
         ) );
         $variables = $query->get_query_vars();
         $products = $query->get_products();
+        $total_parents = $total_parents + count($products);
         foreach ($products as $product_id) 
         {
-            get_variations($product_id);
+            $debugOBJ = new stdClass();
+            $debugOBJ->category  =  $category;
+            $debugOBJ->product_id = $product_id;
+            get_variations($product_id,$category);
         }
     }
+    $total = $total_parents + $total_variations;
+    echo 'Total records: '.$total.' (Parents = '.$total_parents.', Variations = '.$total_variations.'). Success = '.$proc_success.', Fail = '.$proc_fail.'<br>';
 }
 
-function get_variations($product_id)
+function get_variations($product_id,$category)
 {
-    $product = wc_get_product( $product_id );
-    $parent_sku = $product->get_sku();
-    //echo 'Parent SKU: '.$parent_sku.'<br>';
-    $parsed_parent_sku = parse_sku($parent_sku);
-    //echo 'Parsed Parent SKU: '.json_encode($parsed_parent_sku).'<br>';
+    global $debugOBJ,$total,$proc_success,$proc_fail,$total_parents,$total_variations;
+    $product = wc_get_product( $product_id );//get the parent product object
+    $parent_sku = $product->get_sku();//get the parent sku
+    $debugOBJ->parent_sku = $parent_sku;
+    $parsed_parent_sku = parse_parent_sku($parent_sku);//call parse_parent_sku() pass the $parent_sku as a variable
+    $debugOBJ->parsed_parent_sku = $parsed_parent_sku;
     $args = array(
         'parent'    => $product_id, // variable product ID
         'type'      => 'variation',
         'limit'     => -1,
         );
-    $variations = wc_get_products( $args );
-    foreach ( $variations as $variation ) {
-        $id = $variation->get_id();
-        $orig_sku = $variation->get_sku();
-        $attributes = $variation->get_attributes();
-        $sku = new_sku($parsed_parent_sku,$attributes);
-        //echo 'Variation ID: '.$id.', Variation Original SKU: '.$orig_sku.', Attributes: '.json_encode($attributes).', NewSKU: '.json_encode($sku).'<br>';
-        echo 'New SKU = '.$sku['NewSKU'].', Original SKU = '.$orig_sku.'<br>';
-        //$variation->set_sku($sku['NewSKU']);
-        //$variation->save();
-    }  
+    $debugOBJ->get_variations_query_args = $args;
+    $variations = wc_get_products( $args );//execute the query to get all of the product variations objects using args array() for a particular parent_id
+    $total_variations = $total_variations + count($variations);
+    foreach ( $variations as $variation ) { //loop through the variations
+        $variation_id = $variation->get_id(); // Replace with your actual variation ID
+
+        // Get the WC_Product_Variation object
+        $variation_product = wc_get_product( $variation_id );
+
+        // Check if the product object is valid and is a variation
+        if ( $variation_product && $variation_product->is_type( 'variation' ) ) {
+            // Get the SKU of the variation
+            $existing_sku = $variation_product->get_sku();
+            //echo "Existing Variation SKU: " . $existing_sku.'<br>';
+        } else {
+            echo "Invalid variation ID (".$variation_id.")or not a product variation.<br>";
+        }
+        $attributes = $variation_product->get_attributes();
+        $sku = create_new_sku($parsed_parent_sku,$attributes,$category,$variation_id);//create the new sku object
+        $debugOBJ->new_sku_obj = $sku;
+        new deBug('debug object -> '.json_encode($debugOBJ));
+        $new_sku = $sku->NewSKU;
+        if ($new_sku === $existing_sku) {
+            //echo 'No Action Needed for Variation ID = '.$variation_id.', New and Existing SKU = '.$new_sku.'<br>';
+            continue;
+        } else {
+            //echo 'Action NEEDED!<br>';
+            //echo 'Setting Variation ID: '.$variation_id.' with Existing SKU: '.$existing_sku.' and Attributes: '.json_encode($attributes).' to -> NEW sku = '.$new_sku.'<br>';
+            // Assume this is some WooCommerce operation that might throw a WC_Data_Exception
+            try {
+                $variation_product->set_sku( $new_sku );
+                $result = $variation_product->save();
+                //echo 'Update of variation id:'.$variation_id.' was -> '.(bool) $result.' (1=success)<br>';
+                $proc_success++;
+            } catch (WC_Data_Exception $e) {
+                // Handle the exception
+                echo "An error occurred when attempting to set the sku: " . $e->getMessage() . "<br>";
+                // You can also get more detailed error data:
+                $errorData = $e->getErrorData();
+                echo "Error details: " . print_r($errorData, true) ."<br>";
+                echo "SKU creation details: ".json_encode($debugOBJ)."<br>";
+                echo "*****************************************************<br>";
+                $proc_fail++;
+                // Log the error, display a message to the user, or take other actions
+            }
+
+        }
+    }
 }
 
-function parse_sku($sku)
+function parse_parent_sku($sku)
 {
     $parsed_sku = array(
-        'prefix'                        => substr($sku,0,strpos($sku,'-')),
-        'parentsku'                     => substr($sku,strpos($sku,'-')+1),
-        'parsedparentsku'               => explode('|',substr($sku,strpos($sku,'-')+1)),
+        'input_sku'                     => $sku,//input sku value
+        'prefix'                        => substr($sku,0,strpos($sku,'-')), //get the prefix of the parent sku
+        'parentsku'                     => substr($sku,strpos($sku,'-')+1), //parentsku w/o prefix
+        'parsedparentsku'               => explode('|',substr($sku,strpos($sku,'-')+1)), //parse the parent sku at | (variation options should be marked with a '|" before each bracketed '(' ')' )
     ); 
+    $parsed_sku['parentcount'] = count($parsed_sku['parsedparentsku']);
+    
+    $last = $parsed_sku['parsedparentsku'][$parsed_sku['parentcount'] -1];
+    if (strpos($last,')')) {
+        $parsed_sku['postfix'] = substr($last,strpos($last,')')+1);
+    } else { $parsed_sku['postfix'] = ""; }
     return $parsed_sku;
 }
 
-function new_sku($parsed_parent_sku,$attributes)
+function create_new_sku($parsed_parent_sku,$attributes,$category,$variation_id)
 {
+    $new_sku = new stdClass();
     $sku = $parsed_parent_sku;
-    //echo 'Attributes: '.json_encode($attributes).'<br>';
-    $attributevalues = array_values((array)$attributes);
-    //echo 'Attribute Values: '.implode(',',$attributevalues).'<br>';
-    $options = array_values((array)$attributes);
-    echo 'options: '.implode(',',$options).'<br>';
-    if($attributes['pa_color']) 
+    $new_sku->attributevalues = array_values((array)$attributes);
+    $new_sku->options = array_values((array)$attributes);
+    $new_sku->variation_id = $variation_id;
+    if($attributes['pa_color']) //check if the passed in attributes contains the pa_color element 
         {
-            //echo 'COLOR: '.$attributes['pa_color'].'<br>';
-            $sku['prefix'] = get_color_prefix($attributes['pa_color']);
-            array_shift($options);
-            //echo 'options - 1: '.implode(',',$options).'<br>';
+            $new_sku->prefix = get_color_prefix($attributes['pa_color']); //if it does replace the 
+            array_shift($new_sku->options);
         } else 
         { 
-            $sku['prefix'] = null; 
+            $new_sku->prefix = null; 
         }
-    $parentsku = $sku['parsedparentsku'];
-    //echo 'Parentsku: ('.count($parentsku).')'.implode(',',$parentsku).'<br>';
-    //echo 'SKU Prefix: '.$sku['prefix'].'<br>';
+    $new_sku->parsedparentsku = $sku['parsedparentsku'];
+    $new_sku->postfix = $sku['postfix'];
     $j = 0;
     $newsku = array();
-    for ($i=0; $i < count($parentsku); $i++) { 
+    for ($i=0; $i < count($new_sku->parsedparentsku); $i++) { 
         if ($i == 0) {
-            $newsku[$i] = $parentsku[$i]; 
+            $newsku[$i] = $new_sku->parsedparentsku[$i];
         } else 
         {
-            if (str_contains($parentsku[$i],'(')) 
+            if (str_contains($new_sku->parsedparentsku[$i],'(')) 
             {
-                //echo 'Variable: '.$parentsku[$i].' Attributevalue: '.implode(',',$options).'<br>';
-                if (str_contains($options[$j],'wdc') ) 
-                    { 
-                        $newsku[$i] = '-'.strtoupper($options[$j]);
-                    } elseif (str_contains($options[$j],'dc')) {
-                        $newsku[$i] = strtoupper($options[$j]);
-                    } elseif (str_contains($options[$j],'led')) {
-                        $newsku[$i] = '-'.strtoupper($options[$j]);
-                    } elseif (str_contains($options[$j],'none')) {
-                    } elseif (str_contains($options[$j],'None')) {
-                        # code...
-                    } else {
-                        $newsku[$i] = $options[$j];
-                    }
+                if (str_contains($new_sku->options[$j],'wdc') ) { 
+                    $newsku[$i] = '-'.strtoupper($new_sku->options[$j]);
+                } elseif (str_contains($new_sku->options[$j],'dc')) {
+                    $newsku[$i] = strtoupper($new_sku->options[$j]);
+                } elseif (str_contains($new_sku->options[$j],'led')) {
+                    $newsku[$i] = '_'.strtoupper($new_sku->options[$j]);
+                } elseif (str_contains($new_sku->options[$j],'LED')) {
+                    $newsku[$i] = '_'.strtoupper($new_sku->options[$j]);
+                } elseif (str_contains($new_sku->options[$j],'none')) {
+                } elseif (str_contains($new_sku->options[$j],'None')) {
+                } elseif (str_contains($new_sku->options[$j],'F')) {
+                    $newsku[$i] = '-'.strtoupper($new_sku->options[$j]).substr($new_sku->options[$j],strpos($new_sku-->options[$j],'F'));
+                } else {
+                    $newsku[$i] = $new_sku->options[$j];
+                }
                 $j++;
-            } 
+            } elseif (str_contains($new_sku->parsedparentsku[$i],'(')) {
+                # code...
+            }
             else {
-                $newsku[$i] = $parentsku[$i];
+                $newsku[$i] = $new_sku->parsedparentsku[$i];
             }
         } 
     }
-    if (empty($sku['prefix'])) {
-        $sku['NewSKU'] = implode('',$newsku);
+    if (empty($new_sku->prefix)) {
+        $new_sku->NewSKU = '['.get_category_prefix($category).']'.implode('',$newsku).$new_sku->postfix;
     } else {
-        $sku['NewSKU'] = $sku['prefix'].'-'.implode('',$newsku);
+        $new_sku->NewSKU = '['.get_category_prefix($category).']'.$new_sku->prefix.'-'.implode('',$newsku).$new_sku->postfix;
     }
-    //echo 'In Function New SKU: '.json_encode($sku).'<br>';
-    return $sku;
+    return $new_sku;
 }
 
-function update_variation_sku($variation_id,$parent_id,$parent_sku)
+function get_category_prefix($category)
+{
+    $catprefix = strtoupper(substr($category,0,2));
+    return $catprefix;
+}
+
+function update_existing_sku($variation_id,$parent_id,$parent_sku)
 {
     echo "Variation ID: $variation_id".", Parent ID: $parent_id".", Parent SKU: $parent_sku"."<br>";
     $args = array(
@@ -156,21 +217,6 @@ function get_color_prefix($color)
     );
     return $colorprefixs[$color];
 }
-
-function schedule_bulk_product_change_task() {
-    $hook_name = 'bulk_product_change_hook';
-    // Check if the event is already scheduled to prevent multiple schedules
-    if ( ! wp_next_scheduled( $hook_name ) ) {
-        // Schedule the event to run in the near future (e.g., 5 minutes from now)
-        // time() + (5 * MINUTE_IN_SECONDS) schedules it for 5 minutes from now
-        wp_schedule_single_event( time() + (5 * MINUTE_IN_SECONDS), $hook_name );
-    }
-}
-//enable this add_action to schedule task in the background
-//add_action( 'wp', 'schedule_bulk_product_change_task' );
-//enable this add_action to hook into the schedule
-// Link the scheduled hook to your function
-//add_action( 'bulk_product_change_hook', 'bulk_product_change_task' );
 
 add_shortcode( 'bulk_product_change', 'bulk_product_change_task');
 
