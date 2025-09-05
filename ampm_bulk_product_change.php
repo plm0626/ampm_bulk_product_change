@@ -6,7 +6,7 @@ Plugin Name: AMPM Bulk Product Change
 Plugin URI: https://ampmllc.co
 Description: Release 0.0.1
 Author: AMPM LLC
-Version: 0.1.1
+Version: 0.0.1
 Author URI: https://ampmllc.co
 Version History:
 * Version 0.0.1 Baseline
@@ -86,16 +86,16 @@ function get_variations($product_id,$category)
         new deBug('debug object -> '.json_encode($debugOBJ));
         $new_sku = $sku->NewSKU;
         if ($new_sku === $existing_sku) {
-            //echo 'No Action Needed for Variation ID = '.$variation_id.', New and Existing SKU = '.$new_sku.'<br>';
+            echo 'No Action Needed for Variation ID = '.$variation_id.', New and Existing SKU = '.$new_sku.'<br>';
             continue;
         } else {
             //echo 'Action NEEDED!<br>';
-            //echo 'Setting Variation ID: '.$variation_id.' with Existing SKU: '.$existing_sku.' and Attributes: '.json_encode($attributes).' to -> NEW sku = '.$new_sku.'<br>';
+            echo 'Setting Variation ID: '.$variation_id.' with Existing SKU: '.$existing_sku.' and Attributes: '.json_encode($attributes).' to -> NEW sku = '.$new_sku.'<br>';
             // Assume this is some WooCommerce operation that might throw a WC_Data_Exception
             try {
                 $variation_product->set_sku( $new_sku );
                 $result = $variation_product->save();
-                //echo 'Update of variation id:'.$variation_id.' was -> '.(bool) $result.' (1=success)<br>';
+                echo 'Update of variation id:'.$variation_id.' was -> '.(bool) $result.' (1=success)<br>';
                 $proc_success++;
             } catch (WC_Data_Exception $e) {
                 // Handle the exception
