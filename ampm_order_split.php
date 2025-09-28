@@ -171,12 +171,12 @@ function remove_shipping_line_item_from_order( $order, $method_id ) {
 
     // Loop through shipping items and remove them
     foreach ( $shipping_items as $item_id => $item ) {
-      echo "Checking item_id(".$item->get_method_id().") vs method_id(".$method_id;
+      //echo "Checking item_id(".$item->get_method_id().") vs method_id(".$method_id;
       if ( $item->get_method_id() == $method_id ) {
-         echo ") = TRUE"."<br>";
+        //echo ") = TRUE"."<br>";
         $order->remove_item( $item_id );
       } else {
-         echo ") = FALSE"."<br>";
+        //echo ") = FALSE"."<br>";
       }
     }
 
@@ -290,15 +290,15 @@ function check_for_ships_from( $shipping_item, $ships_from )
                 // ->display_key (key formatted for display)
                 // ->display_value (value formatted for display)
                if ( strpos($meta->display_value, $ships_from) !== false ) {
-                  echo "Substring ".$ships_from." found in ".$meta->display_value;
+                  //echo "Substring ".$ships_from." found in ".$meta->display_value;
                   return true;
                } else {
-                  echo "Substring ".$ships_from." NOT found in ".$meta->display_value;
+                  //echo "Substring ".$ships_from." NOT found in ".$meta->display_value;
                }
             }
         }
     //}
-    echo "Substring ".$ships_from." NOT found in ".$meta->display_value;
+    //echo "Substring ".$ships_from." NOT found in ".$meta->display_value;
     return false;
 }
 
