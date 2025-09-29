@@ -4,14 +4,15 @@
 Name: AMPM Order Split
 Plugin Name: AMPM Order Split
 Plugin URI: https://ampmllc.co
-Description: Fixed Shipping Calculation after Order Split
+Description: Fixes to meta data and shipping items delete from original order
 Author: AMPM LLC
-Version: 0.0.3
+Version: 0.0.4
 Author URI: https://ampmllc.co
 Version History:
 * Version 0.0.1 Baseline
 * Version 0.0.2 Added Meta Data for shipping class
 * Version 0.0.3 Fixed Shipping Calculation after Order Split
+* Version 0.0.4 Fixes to meta data and shipping items delete from original order
 */
 
 defined( 'ABSPATH' ) || exit; // block direct access to plugin PHP files by adding this line at the top of each of them
@@ -30,7 +31,8 @@ include( plugin_dir_path( __FILE__ ) . 'orderSplitClass.php');
 add_action( 'woocommerce_thankyou', 'AMPM_split_order_after_checkout', 9999 );
  
 function AMPM_split_order_after_checkout( $order_id ) {
-    
+   global $ordersplitlogArray;
+    $ordersplitlogArray = array( 'order_id' => $order_id );
     $order = wc_get_order( $order_id );
     if ( ! $order || $order->get_meta( '_order_split' ) ) return;
     $items_by_shipping_class = array();
@@ -44,37 +46,40 @@ function AMPM_split_order_after_checkout( $order_id ) {
     }
 
     $values = array_values($shipping_class_array);
+    array_push($ordersplitlogArray,$values);
     $orig_ship_class = $values[0];
     
-    if ( count( $items_by_shipping_class ) > 1 ) {
-      foreach ( array_slice( $items_by_shipping_class, 1 ) as $class_id => $items ) {
-         $args = array(
+    if ( count( $items_by_shipping_class ) > 1 ) { //if there are more than one shipping class (i.e. Spectrum and Milburnie) in the order proceed.
+      foreach ( array_slice( $items_by_shipping_class, 1 ) as $class_id => $items ) { //start with the second shipping class
+        //create the arguments array for creating the split order.
+         $args = array( 
             'status'      => 'pending', // Or 'processing', 'completed', etc.
             'customer_id' => $order->get_customer_id(), // Optional: Assign to a specific customer
-            'customer_note' => 'This Order is split from order: '.$order_id.' to assist in processing by Blue Valley Cabinets at '.$values[1],
+            'customer_note' => 'This Order is split from order# '.$order_id.' to assist in processing by Blue Valley Cabinets at our '.$values[1],' warehouse.'
          );
-         $new_order = wc_create_order( $args );
-         $new_order->set_address( $order->get_address( 'billing' ), 'billing' );
-         if ( $order->needs_shipping_address() ) $new_order->set_address( $order->get_address( 'shipping' ) ?? $order->get_address( 'billing' ), 'shipping' );
+         $new_order = wc_create_order( $args ); //create the split order
+         $new_order->set_address( $order->get_address( 'billing' ), 'billing' ); //use the same billing address
+         if ( $order->needs_shipping_address() ) $new_order->set_address( $order->get_address( 'shipping' ) ?? $order->get_address( 'billing' ), 'shipping' );//set the shipping address if necessary
 
+         //loop through and move to the new order the items in this shipping class!
          foreach ( $items as $item_id => $item ) {
-            $new_item = new WC_Order_Item_Product();
-            $new_item->set_product( $item->get_product() );
-            $new_item->set_quantity( $item->get_quantity() );
+            $new_item = new WC_Order_Item_Product();//create a new item for the order
+            $new_item->set_product( $item->get_product() );//set the item via the original order
+            $new_item->set_quantity( $item->get_quantity() );//set the quantity via the original order
          
-            $new_item->set_total( $item->get_total() );
-            $new_item->set_subtotal( $item->get_subtotal() );
-            $new_item->set_tax_class( $item->get_tax_class() );
-            $new_item->set_taxes( $item->get_taxes() );
+            $new_item->set_total( $item->get_total() );//set the total via the original order
+            $new_item->set_subtotal( $item->get_subtotal() );//set the subtotal via the original order
+            $new_item->set_tax_class( $item->get_tax_class() );//set the tax class via the original order
+            $new_item->set_taxes( $item->get_taxes() );//set the taxes via the original order
 
-             foreach ( $item->get_meta_data() as $meta ) {
+            foreach ( $item->get_meta_data() as $meta ) { //copy original order item meta to new order item meta
                $new_item->add_meta_data( $meta->key, $meta->value, true );
             }
-            $new_order->add_item( $new_item );
-            $order->remove_item( $item_id );
+            $new_order->add_item( $new_item );//add order item for this shipping class to this order
+            $order->remove_item( $item_id );//remove order item from original order
          }
          
-         $new_order = copy_shipping_method_to_new_order($order,$new_order,$values[1]);
+         $new_order = copy_shipping_method_to_new_order($order,$new_order,$values[1]);//copy the appropriate shipping methods to the new order
 
          $new_order = copy_meta($order,$new_order);
          $new_order->update_meta_data('_shipping_class',$values[1], true);      
@@ -89,7 +94,7 @@ function AMPM_split_order_after_checkout( $order_id ) {
          $new_order->save();
          
          $order->calculate_totals();
-         $order->set_customer_note('This is the original Order: '.$order_id.' for Class ID: '.$values[0].' Part of this order was split to another Sales Order to be processed at: '.$values[1]);
+         $order->set_customer_note('This is the original Order# '.$order_id.' with items to be processed at our '.$values[0].' location.  Part of this order was split to another Sales Order for processing at '.$values[1]);
          $order->update_meta_data( '_order_split', true );
          $order->update_meta_data( '_shipping_class', $orig_ship_class, true);
          //$order = remove_existing_shipping_lines($order);
@@ -97,6 +102,8 @@ function AMPM_split_order_after_checkout( $order_id ) {
          //$order = recalculate_shipping($order);
          $order->calculate_totals($order);  
          $order->save();
+         array_push( $ordersplitlogArray, array('order_split' => 'success') );
+         new deBug('Order Split Log Array: '.json_encode($ordersplitlogArray));
       }
  
     }
@@ -115,6 +122,8 @@ function copy_meta($order,$new_order)
 
 function copy_shipping_method_to_new_order($order,$new_order,$ships_from)
 {
+   global $ordersplitlogArray;
+   array_push($ordersplitlogArray,array( 'Processing Ships From' => $ships_from ));
       // Assuming $order is a WC_Order object
    if ( $order ) {
       // Get all shipping items from the order
@@ -122,11 +131,16 @@ function copy_shipping_method_to_new_order($order,$new_order,$ships_from)
 
       // Check if there are any shipping items
       if ( ! empty( $shipping_items ) ) {
-         display_shipping_meta_data_in_order_details( $order,$ships_from );
-         // Loop through each shipping item
-         foreach ( $shipping_items as $item_id => $item ) {
-               //$all_formatted_meta_data = $item->get_formatted_meta_data(); //retrieve the formatted meta data
-               $shipping_item_check = check_for_ships_from($item,$ships_from); //Check if method contains $ships_from
+        display_shipping_meta_data_in_order_details( $order,$ships_from );
+        // Loop through each shipping item
+        $countofshippingitems = count($shipping_items);
+        array_push($ordersplitlogArray,array( 'count of shipping items' => $countofshippingitems ));
+        // Loop through each shipping item
+        foreach ( $shipping_items as $item_id => $item ) {
+            
+                $shipping_item_check = check_for_ships_from($item,$ships_from); //Check if method contains $ships_from
+                array_push( $ordersplitlogArray,array( 'shipping_item_match' => $shipping_item_check ) );
+                //$all_formatted_meta_data = $item->get_formatted_meta_data(); //retrieve the formatted meta data
                if ( $shipping_item_check ) { 
                   // Get the shipping method name (e.g., Flat Rate, Free Shipping)
                   $method_title = $item->get_name();
@@ -138,17 +152,35 @@ function copy_shipping_method_to_new_order($order,$new_order,$ships_from)
                   $cost = $item->get_total();
                   // Get the shipping tax
                   $tax_cost = $item->get_total_tax();
+                  // Get all meta data for the current shipping item
+                  $all_meta_data = $item->get_meta_data();
+                  // Add all meta data to the new shipping itme
+                  foreach ($all_meta_data as $meta_id => $values) {
+                    array_push($ordersplitlogArray,array( $meta_id => json_encode($values) ));
+                    $item->add_meta_data($values->key,$values->value);
+                  }
 
                   $new_shipping_item = new WC_Order_Item_Shipping();
                   $new_shipping_item->set_method_title( $method_title );
                   $new_shipping_item->set_method_id( $method_id );
                   $new_shipping_item->set_total( $cost ); // Set the cost as the total for the shipping item
                   $new_order->add_item( $new_shipping_item );
-                  
-                  remove_shipping_line_item_from_order( $order, $method_id );
+                
+                  $order->remove_item( $item_id );
+                  $order->calculate_totals($order);  
+                  $order->save();
+
 
                } else {
-                  continue;
+                /*
+                  // Get all meta data for the current shipping item
+                  $all_meta_data = $item->get_meta_data();
+                  // Add all meta data to the new shipping itme
+                  foreach ($all_meta_data as $meta_id => $values) {
+                    array_push($ordersplitlogArray,array( $meta_id => json_encode($values) ));
+                    $item->delete_meta_data($values->key);
+                  }
+                  */
                }
             }
       } else {
