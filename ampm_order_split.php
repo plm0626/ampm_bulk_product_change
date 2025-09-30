@@ -94,6 +94,7 @@ function AMPM_split_order_after_checkout( $order_id ) {
          $new_order->set_customer_note('This Order is split from the original order# ('.$order_id.') with items to be processed at our '.$values[1].' location.  Part of this order was split from another Sales Order for processing at '.$values[0]);
 
          $new_order_save_result = $new_order->save();
+         add_note_to_order($new_order_save_result,'Order Split Log Array: '.json_encode($ordersplitlogArray));
          $new_order_save_result = order_save_result($new_order_save_result);
          array_push( $ordersplitlogArray, array('New order split result' => $new_order_save_result ) );
          
@@ -106,7 +107,9 @@ function AMPM_split_order_after_checkout( $order_id ) {
          $save_result = $order->save();
          $save_result = order_save_result($save_result);
          array_push( $ordersplitlogArray, array('Original order split result' => $save_result ) );
+
          new deBug('Order Split Log Array: '.json_encode($ordersplitlogArray));
+         add_note_to_order($order_id,'Order Split Log Array: '.json_encode($ordersplitlogArray));
       }
  
     }
@@ -354,4 +357,31 @@ function get_shipping_class_name($shipping_class_id)
    }
 }
 
+
+function add_note_to_order($order_id,$order_note)
+{
+    global $ordersplitlogArray;
+// Ensure WooCommerce is active
+if ( class_exists( 'WooCommerce' ) ) {
+
+    $order = wc_get_order( $order_id );
+
+    if ( $order ) {
+        $note_text = __( $order_note );
+        $formatted_note = sprintf( $note_text, $order_id );
+
+        // Add the order note (defaults to private note)
+        $order->add_order_note( $formatted_note );
+
+        // If you want to add a customer-visible note:
+        // $is_customer_note = 1; // Set to 1 for customer note, 0 for private
+        // $order->add_order_note( $formatted_note, $is_customer_note );
+
+        array_push($ordersplitlogArray,array( __FUNCTION__ => 'Order note added successfully for order #' . $order_id ));
+    } else {
+        array_push($ordersplitlogArray,array( __FUNCTION__ => 'Order not found for ID: ' . $order_id ));
+    }
+}
+
+}
 ?>
