@@ -4,15 +4,16 @@
 Name: AMPM Order Split
 Plugin Name: AMPM Order Split
 Plugin URI: https://ampmllc.co
-Description: Fixes to meta data and shipping items delete from original order
+Description: Cleaned up version with debug
 Author: AMPM LLC
-Version: 0.0.4
+Version: 0.0.5
 Author URI: https://ampmllc.co
 Version History:
 * Version 0.0.1 Baseline
 * Version 0.0.2 Added Meta Data for shipping class
 * Version 0.0.3 Fixed Shipping Calculation after Order Split
 * Version 0.0.4 Fixes to meta data and shipping items delete from original order
+* Version 0.0.5 Cleaned up version with debug
 */
 
 defined( 'ABSPATH' ) || exit; // block direct access to plugin PHP files by adding this line at the top of each of them
@@ -38,6 +39,7 @@ function AMPM_split_order_after_checkout( $order_id ) {
     $items_by_shipping_class = array();
     $shipping_class_array = array();
 
+    //Collect information regarding which shipping classes items belong and sort them into a double array
     foreach ( $order->get_items() as $item_id => $item ) {
         $product = $item->get_product();     
         $class_id = $product->get_shipping_class_id();
@@ -81,28 +83,29 @@ function AMPM_split_order_after_checkout( $order_id ) {
          
          $new_order = copy_shipping_method_to_new_order($order,$new_order,$values[1]);//copy the appropriate shipping methods to the new order
 
-         $new_order = copy_meta($order,$new_order);
-         $new_order->update_meta_data('_shipping_class',$values[1], true);      
+         $new_order = copy_meta($order,$new_order);//copy order meta_data to new_order meta_data
+         $new_order->update_meta_data('_shipping_class',$values[1], true);//update _shipping_class meta_data for this order so that it is not reprocessed.
          $new_order->calculate_totals();  
          $new_order->set_payment_method( $order->get_payment_method() );
          $new_order->set_payment_method_title( $order->get_payment_method_title() );         
          $new_order->update_status( $order->get_status() );
-         //$new_order = remove_existing_shipping_lines($new_order);
          $new_order->calculate_shipping();
-         //$new_order = recalculate_shipping($new_order);
-         $new_order->calculate_totals();  
-         $new_order->save();
+         $new_order->calculate_totals();
+         $new_order->set_customer_note('This Order is split from the original order# ('.$order_id.') with items to be processed at our '.$values[1].' location.  Part of this order was split from another Sales Order for processing at '.$values[0]);
+
+         $new_order_save_result = $new_order->save();
+         $new_order_save_result = order_save_result($new_order_save_result);
+         array_push( $ordersplitlogArray, array('New order split result' => $new_order_save_result ) );
          
          $order->calculate_totals();
          $order->set_customer_note('This is the original Order# '.$order_id.' with items to be processed at our '.$values[0].' location.  Part of this order was split to another Sales Order for processing at '.$values[1]);
          $order->update_meta_data( '_order_split', true );
          $order->update_meta_data( '_shipping_class', $orig_ship_class, true);
-         //$order = remove_existing_shipping_lines($order);
          $order->calculate_shipping();
-         //$order = recalculate_shipping($order);
          $order->calculate_totals($order);  
-         $order->save();
-         array_push( $ordersplitlogArray, array('order_split' => 'success') );
+         $save_result = $order->save();
+         $save_result = order_save_result($save_result);
+         array_push( $ordersplitlogArray, array('Original order split result' => $save_result ) );
          new deBug('Order Split Log Array: '.json_encode($ordersplitlogArray));
       }
  
@@ -110,7 +113,17 @@ function AMPM_split_order_after_checkout( $order_id ) {
     
 }
 
-function copy_meta($order,$new_order)
+function order_save_result($save_result)
+{
+    if ( is_numeric($save_result) ) {
+    $save_result = 'Successfully saved original order update(s) (orderid = '.$save_result.')';
+    } else {
+    $save_result = 'FAILURE when saving original order update(s) (orderid = '.$save_result.')';
+    }
+    return $save_result;
+}
+
+function copy_meta($order,$new_order) //copy order meta_data to new_order.  order remains unchanged. Return the new order.
 {
    $order_meta = $order->get_meta_data();
    foreach ( $order_meta as $id => $values ) {
@@ -120,6 +133,9 @@ function copy_meta($order,$new_order)
    return $new_order;
 }
 
+/**
+ * Copy shipping methods appropriate to the current shipping_class being processed.
+ */
 function copy_shipping_method_to_new_order($order,$new_order,$ships_from)
 {
    global $ordersplitlogArray;
@@ -131,7 +147,7 @@ function copy_shipping_method_to_new_order($order,$new_order,$ships_from)
 
       // Check if there are any shipping items
       if ( ! empty( $shipping_items ) ) {
-        display_shipping_meta_data_in_order_details( $order,$ships_from );
+        display_shipping_meta_data_in_order_details( $order,$ships_from ); //outputs shipping details at the bottom of the returned successful order page for the customer
         // Loop through each shipping item
         $countofshippingitems = count($shipping_items);
         array_push($ordersplitlogArray,array( 'count of shipping items' => $countofshippingitems ));
@@ -140,8 +156,7 @@ function copy_shipping_method_to_new_order($order,$new_order,$ships_from)
             
                 $shipping_item_check = check_for_ships_from($item,$ships_from); //Check if method contains $ships_from
                 array_push( $ordersplitlogArray,array( 'shipping_item_match' => $shipping_item_check ) );
-                //$all_formatted_meta_data = $item->get_formatted_meta_data(); //retrieve the formatted meta data
-               if ( $shipping_item_check ) { 
+               if ( $shipping_item_check ) { //if this shipping method is for ships_from -> Add method and meta_data to the new order
                   // Get the shipping method name (e.g., Flat Rate, Free Shipping)
                   $method_title = $item->get_name();
                   // Get the shipping method ID (e.g., 'flat_rate', 'free_shipping')
@@ -166,24 +181,13 @@ function copy_shipping_method_to_new_order($order,$new_order,$ships_from)
                   $new_shipping_item->set_total( $cost ); // Set the cost as the total for the shipping item
                   $new_order->add_item( $new_shipping_item );
                 
-                  $order->remove_item( $item_id );
+                  $order->remove_item( $item_id );//remove the method from the original order
                   $order->calculate_totals($order);  
                   $order->save();
 
 
-               } else {
-                /*
-                  // Get all meta data for the current shipping item
-                  $all_meta_data = $item->get_meta_data();
-                  // Add all meta data to the new shipping itme
-                  foreach ($all_meta_data as $meta_id => $values) {
-                    array_push($ordersplitlogArray,array( $meta_id => json_encode($values) ));
-                    $item->delete_meta_data($values->key);
-                  }
-                  */
                }
             }
-      } else {
       }
    }
 
@@ -300,9 +304,13 @@ function display_shipping_meta_data_in_order_details( $order ) {
     }
 }
 
-
+/**
+ * Checks to see if a shipping_item contains the ships_from string in it's formatted_meta_data
+ * If it does it returns true. Else it returns false.
+ */
 function check_for_ships_from( $shipping_item, $ships_from )
 {
+   global $ordersplitlogArray;
 
     // Get all items in the "shipping" group for the order.
     //$shipping_items = $order->get_items( 'shipping' );
@@ -322,15 +330,13 @@ function check_for_ships_from( $shipping_item, $ships_from )
                 // ->display_key (key formatted for display)
                 // ->display_value (value formatted for display)
                if ( strpos($meta->display_value, $ships_from) !== false ) {
-                  //echo "Substring ".$ships_from." found in ".$meta->display_value;
+                  array_push($ordersplitlogArray,array( __FUNCTION__ => "Substring ".$ships_from." found in ".$meta->display_value));
                   return true;
                } else {
-                  //echo "Substring ".$ships_from." NOT found in ".$meta->display_value;
                }
             }
         }
-    //}
-    //echo "Substring ".$ships_from." NOT found in ".$meta->display_value;
+    array_push($ordersplitlogArray,array( __FUNCTION__ => "Substring ".$ships_from." NOT found in Shipping Item meta_data"));
     return false;
 }
 
@@ -346,23 +352,6 @@ function get_shipping_class_name($shipping_class_id)
    } else {
       return 'No shipping class assigned.';
    }
-}
-
-function recalculate_shipping($order)
-{
-    foreach ( $order->get_shipping_methods() as $shipping_item_id => $shipping_item ) {
-        $order->remove_item( $shipping_item_id );
-    }
-    $order->calculate_shipping();
-    return $order;
-}
-
-function remove_existing_shipping_lines($order)
-{
-   foreach ( $order->get_shipping_methods() as $shipping_item_id => $shipping_item ) {
-      $order->remove_item( $shipping_item_id );
-   }
-   return $order;
 }
 
 ?>
