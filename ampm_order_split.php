@@ -4,9 +4,9 @@
 Name: AMPM Order Split
 Plugin Name: AMPM Order Split
 Plugin URI: https://ampmllc.co
-Description: Cleaned up version with debug
+Description: Fixed to handle use case where there is only one shipping class in the order
 Author: AMPM LLC
-Version: 0.0.5
+Version: 0.0.6
 Author URI: https://ampmllc.co
 Version History:
 * Version 0.0.1 Baseline
@@ -14,6 +14,7 @@ Version History:
 * Version 0.0.3 Fixed Shipping Calculation after Order Split
 * Version 0.0.4 Fixes to meta data and shipping items delete from original order
 * Version 0.0.5 Cleaned up version with debug
+* Version 0.0.6 Fixed to handle use case where there is only one shipping class in the order
 */
 
 defined( 'ABSPATH' ) || exit; // block direct access to plugin PHP files by adding this line at the top of each of them
@@ -112,6 +113,16 @@ function AMPM_split_order_after_checkout( $order_id ) {
          add_note_to_order($order_id,'Order Split Log Array: '.json_encode($ordersplitlogArray));
       }
  
+    } else {
+        $order->set_customer_note('This is the original Order# '.$order_id.' with items to be processed at our '.$values[0].' location.  The order did not require splitting as all items are to be processed at the same location.');
+        $order->update_meta_data( '_order_split', true );
+        $order->update_meta_data( '_shipping_class', $orig_ship_class, true);
+        $save_result = $order->save();
+        $save_result = order_save_result($save_result);
+        array_push( $ordersplitlogArray, array('Original order split result' => $save_result ) );
+        array_push( $ordersplitlogArray, array('No order split required for order #' => $order_id ) );
+        new deBug('Order Split Log Array: '.json_encode($ordersplitlogArray));
+        add_note_to_order($order_id,'Order Split Log Array: '.json_encode($ordersplitlogArray));        
     }
     
 }
