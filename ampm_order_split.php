@@ -4,9 +4,9 @@
 Name: AMPM Order Split
 Plugin Name: AMPM Order Split
 Plugin URI: https://ampmllc.co
-Description: Fixed to handle use case where there is only one shipping class in the order
+Description: Fix Coupon handling on split orders
 Author: AMPM LLC
-Version: 0.0.6
+Version: 0.0.7
 Author URI: https://ampmllc.co
 Version History:
 * Version 0.0.1 Baseline
@@ -15,6 +15,7 @@ Version History:
 * Version 0.0.4 Fixes to meta data and shipping items delete from original order
 * Version 0.0.5 Cleaned up version with debug
 * Version 0.0.6 Fixed to handle use case where there is only one shipping class in the order
+* Version 0.0.7 Fix Coupon handling on split orders
 */
 
 defined( 'ABSPATH' ) || exit; // block direct access to plugin PHP files by adding this line at the top of each of them
@@ -83,7 +84,7 @@ function AMPM_split_order_after_checkout( $order_id ) {
          }
          
          $new_order = copy_shipping_method_to_new_order($order,$new_order,$values[1]);//copy the appropriate shipping methods to the new order
-
+         $new_order = copy_coupons_to_new_order($order,$new_order);//copy the appropriate coupons to the new order
          $new_order = copy_meta($order,$new_order);//copy order meta_data to new_order meta_data
          $new_order->update_meta_data('_shipping_class',$values[1], true);//update _shipping_class meta_data for this order so that it is not reprocessed.
          $new_order->calculate_totals();  
@@ -108,8 +109,6 @@ function AMPM_split_order_after_checkout( $order_id ) {
          $save_result = $order->save();
          $save_result = order_save_result($save_result);
          array_push( $ordersplitlogArray, array('Original order split result' => $save_result ) );
-
-         new deBug('Order Split Log Array: '.json_encode($ordersplitlogArray));
          add_note_to_order($order_id,'Order Split Log Array: '.json_encode($ordersplitlogArray));
       }
  
@@ -121,7 +120,6 @@ function AMPM_split_order_after_checkout( $order_id ) {
         $save_result = order_save_result($save_result);
         array_push( $ordersplitlogArray, array('Original order split result' => $save_result ) );
         array_push( $ordersplitlogArray, array('No order split required for order #' => $order_id ) );
-        new deBug('Order Split Log Array: '.json_encode($ordersplitlogArray));
         add_note_to_order($order_id,'Order Split Log Array: '.json_encode($ordersplitlogArray));        
     }
     
@@ -147,6 +145,35 @@ function copy_meta($order,$new_order) //copy order meta_data to new_order.  orde
    return $new_order;
 }
 
+function copy_coupons_to_new_order($order,$new_order)
+{
+   global $ordersplitlogArray;
+   array_push($ordersplitlogArray,array( 'Copying Coupons to new order' => $new_order->get_id() ));
+      // Assuming $order is a WC_Order object
+   if ( $order ) {
+      // Get all coupon items from the order
+      $coupon_items = $order->get_items( 'coupon' );
+
+      // Check if there are any coupon items
+      if ( ! empty( $coupon_items ) ) {
+        // Loop through each coupon item
+        $countofcouponitems = count($coupon_items);
+        array_push($ordersplitlogArray,array( 'count of coupon items' => $countofcouponitems ));
+        foreach ( $coupon_items as $item_id => $item ) {
+            $coupon_code = $item->get_code();
+            $discount_amount = $item->get_discount();
+            $new_coupon_item = new WC_Order_Item_Coupon();
+            $new_coupon_item->set_code( $coupon_code );
+            $new_coupon_item->set_discount( $discount_amount );
+            $new_order->add_item( $new_coupon_item );
+            $order->calculate_totals($order);  
+            $order->save();
+        }
+      }
+   }
+
+   return $new_order;
+}
 /**
  * Copy shipping methods appropriate to the current shipping_class being processed.
  */
