@@ -87,7 +87,7 @@ function AMPM_split_order_after_checkout( $order_id ) {
          $new_order = copy_coupons_to_new_order($order,$new_order);//copy the appropriate coupons to the new order
          $new_order = copy_meta($order,$new_order);//copy order meta_data to new_order meta_data
          $new_order->update_meta_data('_shipping_class',$values[1], true);//update _shipping_class meta_data for this order so that it is not reprocessed.
-         $new_order->calculate_totals();  
+         //$new_order->calculate_totals();  
          $new_order->set_payment_method( $order->get_payment_method() );
          $new_order->set_payment_method_title( $order->get_payment_method_title() );         
          $new_order->update_status( $order->get_status() );
@@ -100,15 +100,17 @@ function AMPM_split_order_after_checkout( $order_id ) {
          $new_order_save_result = order_save_result($new_order_save_result);
          array_push( $ordersplitlogArray, array('New order split result' => $new_order_save_result ) );
          
-         $order->calculate_totals();
+         //$order->calculate_totals();
          $order->set_customer_note('This is the original Order# '.$order_id.' with items to be processed at our '.$values[0].' location.  Part of this order was split to another Sales Order for processing at '.$values[1]);
          $order->update_meta_data( '_order_split', true );
          $order->update_meta_data( '_shipping_class', $orig_ship_class, true);
          $order->calculate_shipping();
-         $order->calculate_totals($order);  
+         $order->calculate_totals();  
          $save_result = $order->save();
          $save_result = order_save_result($save_result);
          array_push( $ordersplitlogArray, array('Original order split result' => $save_result ) );
+
+         //new deBug('Order Split Log Array: '.json_encode($ordersplitlogArray));
          add_note_to_order($order_id,'Order Split Log Array: '.json_encode($ordersplitlogArray));
       }
  
@@ -120,6 +122,7 @@ function AMPM_split_order_after_checkout( $order_id ) {
         $save_result = order_save_result($save_result);
         array_push( $ordersplitlogArray, array('Original order split result' => $save_result ) );
         array_push( $ordersplitlogArray, array('No order split required for order #' => $order_id ) );
+        //new deBug('Order Split Log Array: '.json_encode($ordersplitlogArray));
         add_note_to_order($order_id,'Order Split Log Array: '.json_encode($ordersplitlogArray));        
     }
     
@@ -166,8 +169,9 @@ function copy_coupons_to_new_order($order,$new_order)
             $new_coupon_item->set_code( $coupon_code );
             $new_coupon_item->set_discount( $discount_amount );
             $new_order->add_item( $new_coupon_item );
-            $order->calculate_totals($order);  
-            $order->save();
+            //$order->remove_item( $item_id );//remove the coupon from the original order
+            //$order->calculate_totals($order);  
+            //$order->save();
         }
       }
    }
