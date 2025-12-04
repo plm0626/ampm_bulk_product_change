@@ -4,9 +4,9 @@
 Name: AMPM Order Split
 Plugin Name: AMPM Order Split
 Plugin URI: https://ampmllc.co
-Description: Fix Coupon handling on split orders
+Description: Added order note from BVC Credit Check to order before split (requires AMPM_credit_check plugin)
 Author: AMPM LLC
-Version: 0.0.7
+Version: 0.0.8
 Author URI: https://ampmllc.co
 Version History:
 * Version 0.0.1 Baseline
@@ -16,6 +16,7 @@ Version History:
 * Version 0.0.5 Cleaned up version with debug
 * Version 0.0.6 Fixed to handle use case where there is only one shipping class in the order
 * Version 0.0.7 Fix Coupon handling on split orders
+* Version 0.0.8 Added order note from BVC Credit Check to order before split (requires AMPM_credit_check plugin)
 */
 
 defined( 'ABSPATH' ) || exit; // block direct access to plugin PHP files by adding this line at the top of each of them
@@ -40,6 +41,13 @@ function AMPM_split_order_after_checkout( $order_id ) {
     if ( ! $order || $order->get_meta( '_order_split' ) ) return;
     $items_by_shipping_class = array();
     $shipping_class_array = array();
+
+    /** The following is added to record the results of the AMPM Credit Check Functionality after the order is actually created. This aids in trouble shooting. */
+    if ( function_exists( 'user_credit_check' ) ) {
+        // The function 'user_credit_check' exists, so it can be called safely.
+        $credit_check = user_credit_check();
+        add_note_to_order($order_id,'BVC Credit Check Results: '.json_encode($credit_check));
+    }
 
     //Collect information regarding which shipping classes items belong and sort them into a double array
     foreach ( $order->get_items() as $item_id => $item ) {
