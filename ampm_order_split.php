@@ -39,7 +39,7 @@ function AMPM_split_order_after_checkout( $order_id ) {
    global $ordersplitlogArray;
     $ordersplitlogArray = array( 'order_id' => $order_id );
     $order = wc_get_order( $order_id );
-    $order_note = '<b>'.$order->get_customer_note().'</b><br>'; //get the customer provided order note and append linefeed.
+    $order_note = $order->get_customer_note().'********'; //get the customer provided order note and append linefeed.
     if ( ! $order || $order->get_meta( '_order_split' ) ) return;
     $items_by_shipping_class = array();
     $shipping_class_array = array();
