@@ -4,9 +4,9 @@
 Name: AMPM Order Split
 Plugin Name: AMPM Order Split
 Plugin URI: https://ampmllc.co
-Description: Added order note from BVC Credit Check to order before split (requires AMPM_credit_check plugin)
+Description: Changed order note to append so any notes entered by the customer will get added to Netsuite Sales Order(s) - WIP
 Author: AMPM LLC
-Version: 0.0.8
+Version: 0.0.9
 Author URI: https://ampmllc.co
 Version History:
 * Version 0.0.1 Baseline
@@ -17,6 +17,7 @@ Version History:
 * Version 0.0.6 Fixed to handle use case where there is only one shipping class in the order
 * Version 0.0.7 Fix Coupon handling on split orders
 * Version 0.0.8 Added order note from BVC Credit Check to order before split (requires AMPM_credit_check plugin)
+* Version 0.0.9 Changed order note to append so any notes entered by the customer will get added to Netsuite Sales Order(s) - WIP
 */
 
 defined( 'ABSPATH' ) || exit; // block direct access to plugin PHP files by adding this line at the top of each of them
@@ -38,6 +39,7 @@ function AMPM_split_order_after_checkout( $order_id ) {
    global $ordersplitlogArray;
     $ordersplitlogArray = array( 'order_id' => $order_id );
     $order = wc_get_order( $order_id );
+    $order_note = '<b>'.$order->get_customer_note().'</b><br>'; //get the customer provided order note and append linefeed.
     if ( ! $order || $order->get_meta( '_order_split' ) ) return;
     $items_by_shipping_class = array();
     $shipping_class_array = array();
@@ -67,7 +69,7 @@ function AMPM_split_order_after_checkout( $order_id ) {
          $args = array( 
             'status'      => 'pending', // Or 'processing', 'completed', etc.
             'customer_id' => $order->get_customer_id(), // Optional: Assign to a specific customer
-            'customer_note' => 'This Order is split from order# '.$order_id.' to assist in processing by Blue Valley Cabinets at our '.$values[1],' warehouse.'
+            'customer_note' => $order_note.'This Order is split from order# '.$order_id.' to assist in processing by Blue Valley Cabinets at our '.$values[1],' warehouse.'
          );
          $new_order = wc_create_order( $args ); //create the split order
          $new_order->set_address( $order->get_address( 'billing' ), 'billing' ); //use the same billing address
@@ -101,7 +103,7 @@ function AMPM_split_order_after_checkout( $order_id ) {
          $new_order->update_status( $order->get_status() );
          $new_order->calculate_shipping();
          $new_order->calculate_totals();
-         $new_order->set_customer_note('This Order is split from the original order# ('.$order_id.') with items to be processed at our '.$values[1].' location.  Part of this order was split from another Sales Order for processing at '.$values[0]);
+         //$new_order->set_customer_note($order_note.'This Order is split from the original order# ('.$order_id.') with items to be processed at our '.$values[1].' location.  Part of this order was split from another Sales Order for processing at '.$values[0]);
 
          $new_order_save_result = $new_order->save();
          add_note_to_order($new_order_save_result,'Order Split Log Array: '.json_encode($ordersplitlogArray));
@@ -109,11 +111,11 @@ function AMPM_split_order_after_checkout( $order_id ) {
          array_push( $ordersplitlogArray, array('New order split result' => $new_order_save_result ) );
          
          //$order->calculate_totals();
-         $order->set_customer_note('This is the original Order# '.$order_id.' with items to be processed at our '.$values[0].' location.  Part of this order was split to another Sales Order for processing at '.$values[1]);
+         $order->set_customer_note($order_note.'This is the original Order# '.$order_id.' with items to be processed at our '.$values[0].' location.  Part of this order was split to another Sales Order for processing at '.$values[1]);
          $order->update_meta_data( '_order_split', true );
          $order->update_meta_data( '_shipping_class', $orig_ship_class, true);
          $order->calculate_shipping();
-         $order->calculate_totals();  
+         $order->calculate_totals();
          $save_result = $order->save();
          $save_result = order_save_result($save_result);
          array_push( $ordersplitlogArray, array('Original order split result' => $save_result ) );
@@ -123,14 +125,13 @@ function AMPM_split_order_after_checkout( $order_id ) {
       }
  
     } else {
-        $order->set_customer_note('This is the original Order# '.$order_id.' with items to be processed at our '.$values[0].' location.  The order did not require splitting as all items are to be processed at the same location.');
+        $order->set_customer_note($order_note.'This is the original Order# '.$order_id.' with items to be processed at our '.$values[0].' location.  The order did not require splitting as all items are to be processed at the same location.');
         $order->update_meta_data( '_order_split', true );
         $order->update_meta_data( '_shipping_class', $orig_ship_class, true);
         $save_result = $order->save();
         $save_result = order_save_result($save_result);
         array_push( $ordersplitlogArray, array('Original order split result' => $save_result ) );
         array_push( $ordersplitlogArray, array('No order split required for order #' => $order_id ) );
-        //new deBug('Order Split Log Array: '.json_encode($ordersplitlogArray));
         add_note_to_order($order_id,'Order Split Log Array: '.json_encode($ordersplitlogArray));        
     }
     
