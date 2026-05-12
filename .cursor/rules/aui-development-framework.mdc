@@ -1,0 +1,14 @@
+---
+description: AUI Development Framework rules for this WordPress plugin repository
+alwaysApply: true
+---
+
+# AUI Development Framework
+
+- Treat `docs/use-cases/` as the source of behavioral intent.
+- Keep Related Code sections current when implementation changes.
+- Use `docs/templates/` when adding use cases, issue drafts, or decision records.
+- Prefer portable repository-relative paths.
+- Do not introduce absolute symlinks for shared code.
+- Run `make check` before committing when available.
+

@@ -1,0 +1,29 @@
+title: "Architecture discussion: "
+labels:
+  - architecture
+body:
+  - type: markdown
+    attributes:
+      value: "Use this discussion to capture architecture context before it becomes a decision record."
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: What problem or recurring decision needs architectural attention?
+    validations:
+      required: true
+  - type: textarea
+    id: options
+    attributes:
+      label: Options
+      description: What options are being considered?
+    validations:
+      required: false
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Proposed Outcome
+      description: What decision seems likely, and what should become an ADR?
+    validations:
+      required: false
+
