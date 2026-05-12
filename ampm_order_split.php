@@ -4,7 +4,7 @@
 Name: AMPM Order Split
 Plugin Name: AMPM Order Split
 Plugin URI: https://ampmllc.co
-Description: Changed order note to append so any notes entered by the customer will get added to Netsuite Sales Order(s) - WIP
+Description: WIP - Changed order note to append so any notes entered by the customer will get added to Netsuite Sales Order(s) - WIP
 Author: AMPM LLC
 Version: 0.0.9
 Author URI: https://ampmllc.co
@@ -36,11 +36,11 @@ include( plugin_dir_path( __FILE__ ) . 'orderSplitClass.php');
 add_action( 'woocommerce_thankyou', 'AMPM_split_order_after_checkout', 9999 );
  
 function AMPM_split_order_after_checkout( $order_id ) {
-   global $ordersplitlogArray;
+    global $ordersplitlogArray;
     $ordersplitlogArray = array( 'order_id' => $order_id );
     $order = wc_get_order( $order_id );
-    $order_note = $order->get_customer_note().'********'; //get the customer provided order note and append linefeed.
     if ( ! $order || $order->get_meta( '_order_split' ) ) return;
+    $order_note = $order->get_customer_note().'********'; //get the customer provided order note and append linefeed.
     $items_by_shipping_class = array();
     $shipping_class_array = array();
 
@@ -53,10 +53,22 @@ function AMPM_split_order_after_checkout( $order_id ) {
 
     //Collect information regarding which shipping classes items belong and sort them into a double array
     foreach ( $order->get_items() as $item_id => $item ) {
-        $product = $item->get_product();     
+        if ( ! $item instanceof WC_Order_Item_Product ) {
+            continue;
+        }
+
+        $product = $item->get_product();
+        if ( ! $product instanceof WC_Product ) {
+            continue;
+        }
+
         $class_id = $product->get_shipping_class_id();
         $shipping_class_array[$class_id] = get_shipping_class_name($class_id);
         $items_by_shipping_class[$class_id][$item_id] = $item;
+    }
+
+    if ( empty( $items_by_shipping_class ) ) {
+        return;
     }
 
     $values = array_values($shipping_class_array);
@@ -69,7 +81,7 @@ function AMPM_split_order_after_checkout( $order_id ) {
          $args = array( 
             'status'      => 'pending', // Or 'processing', 'completed', etc.
             'customer_id' => $order->get_customer_id(), // Optional: Assign to a specific customer
-            'customer_note' => $order_note.'This Order is split from order# '.$order_id.' to assist in processing by Blue Valley Cabinets at our '.$values[1],' warehouse.'
+            'customer_note' => $order_note.'This Order is split from order# '.$order_id.' to assist in processing by Blue Valley Cabinets at our '.$values[1].' warehouse.'
          );
          $new_order = wc_create_order( $args ); //create the split order
          $new_order->set_address( $order->get_address( 'billing' ), 'billing' ); //use the same billing address
@@ -77,8 +89,17 @@ function AMPM_split_order_after_checkout( $order_id ) {
 
          //loop through and move to the new order the items in this shipping class!
          foreach ( $items as $item_id => $item ) {
+            if ( ! $item instanceof WC_Order_Item_Product ) {
+                continue;
+            }
+
+            $product = $item->get_product();
+            if ( ! $product instanceof WC_Product ) {
+                continue;
+            }
+
             $new_item = new WC_Order_Item_Product();//create a new item for the order
-            $new_item->set_product( $item->get_product() );//set the item via the original order
+            $new_item->set_product( $product );//set the item via the original order
             $new_item->set_quantity( $item->get_quantity() );//set the quantity via the original order
          
             $new_item->set_total( $item->get_total() );//set the total via the original order
@@ -172,6 +193,10 @@ function copy_coupons_to_new_order($order,$new_order)
         $countofcouponitems = count($coupon_items);
         array_push($ordersplitlogArray,array( 'count of coupon items' => $countofcouponitems ));
         foreach ( $coupon_items as $item_id => $item ) {
+            if ( ! $item instanceof WC_Order_Item_Coupon ) {
+                continue;
+            }
+
             $coupon_code = $item->get_code();
             $discount_amount = $item->get_discount();
             $new_coupon_item = new WC_Order_Item_Coupon();
@@ -201,12 +226,15 @@ function copy_shipping_method_to_new_order($order,$new_order,$ships_from)
 
       // Check if there are any shipping items
       if ( ! empty( $shipping_items ) ) {
-        display_shipping_meta_data_in_order_details( $order,$ships_from ); //outputs shipping details at the bottom of the returned successful order page for the customer
+        display_shipping_meta_data_in_order_details( $order ); //outputs shipping details at the bottom of the returned successful order page for the customer
         // Loop through each shipping item
         $countofshippingitems = count($shipping_items);
         array_push($ordersplitlogArray,array( 'count of shipping items' => $countofshippingitems ));
         // Loop through each shipping item
         foreach ( $shipping_items as $item_id => $item ) {
+                if ( ! $item instanceof WC_Order_Item_Shipping ) {
+                    continue;
+                }
             
                 $shipping_item_check = check_for_ships_from($item,$ships_from); //Check if method contains $ships_from
                 array_push( $ordersplitlogArray,array( 'shipping_item_match' => $shipping_item_check ) );
@@ -261,6 +289,10 @@ function remove_shipping_line_item_from_order( $order, $method_id ) {
 
     // Loop through shipping items and remove them
     foreach ( $shipping_items as $item_id => $item ) {
+      if ( ! $item instanceof WC_Order_Item_Shipping ) {
+        continue;
+      }
+
       //echo "Checking item_id(".$item->get_method_id().") vs method_id(".$method_id;
       if ( $item->get_method_id() == $method_id ) {
         //echo ") = TRUE"."<br>";
@@ -296,6 +328,10 @@ function display_order_shipping_meta_data( $order, $meta_key ) {
         echo '<h3>Shipping Details:</h3>';
         echo '<ul>';
         foreach ( $shipping_items as $item_id => $shipping_item ) {
+            if ( ! $shipping_item instanceof WC_Order_Item_Shipping ) {
+                continue;
+            }
+
             // Get the meta data for the specific key
             $meta_value = $shipping_item->get_meta( $meta_key );
 
@@ -332,6 +368,9 @@ function display_shipping_meta_data_in_order_details( $order ) {
 
     // Loop through each shipping item.
     foreach ( $shipping_items as $item_id => $shipping_item ) {
+        if ( ! $shipping_item instanceof WC_Order_Item_Shipping ) {
+            continue;
+        }
 
         // Get the formatted meta data.
         $meta_data = $shipping_item->get_formatted_meta_data();
@@ -365,6 +404,9 @@ function display_shipping_meta_data_in_order_details( $order ) {
 function check_for_ships_from( $shipping_item, $ships_from )
 {
    global $ordersplitlogArray;
+    if ( ! $shipping_item instanceof WC_Order_Item_Shipping ) {
+        return false;
+    }
 
     // Get all items in the "shipping" group for the order.
     //$shipping_items = $order->get_items( 'shipping' );
@@ -394,7 +436,7 @@ function check_for_ships_from( $shipping_item, $ships_from )
     return false;
 }
 
-function get_shipping_class_name($shipping_class_id)
+function get_shipping_class_name($shipping_class_id): string
 {
    if ( $shipping_class_id > 0 ) { // Check if a shipping class is assigned
       $shipping_class_term = get_term( $shipping_class_id, 'product_shipping_class' );
@@ -403,6 +445,7 @@ function get_shipping_class_name($shipping_class_id)
          $shipping_class_name = $shipping_class_term->name;
          return $shipping_class_name;
       }
+      return 'Unknown shipping class.';
    } else {
       return 'No shipping class assigned.';
    }

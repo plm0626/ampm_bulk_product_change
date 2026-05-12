@@ -1,6 +1,7 @@
 <?php
 
 defined( 'ABSPATH' ) || define( 'ABSPATH', __DIR__ . '/' );
+require_once dirname( __DIR__, 3 ) . '/stubs.php';
 
 if ( ! function_exists( 'add_action' ) ) {
 	function add_action( string $hook_name, callable|string $callback, int $priority = 10, int $accepted_args = 1 ): bool {
@@ -43,4 +44,3 @@ if ( ! function_exists( 'wc_get_logger' ) ) {
 		};
 	}
 }
-
