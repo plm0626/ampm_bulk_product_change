@@ -14,6 +14,17 @@ if ( ! class_exists( 'deBug' ) )
   class deBug {
     // Properties
     var $msg;
+    var $timezone;
+    var $orig_msg;
+    var $printable;
+    var $console;
+    var $date;
+    var $timestamp;
+    var $user;
+    var $msg_out;
+    var $file;
+    var $write;
+    var $close;
     // Methods
     function __construct($orig_msg) {
       $this->timezone = 'UTC';
