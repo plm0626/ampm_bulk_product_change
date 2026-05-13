@@ -6,7 +6,7 @@ Plugin Name: AMPM Order Split
 Plugin URI: https://ampmllc.co
 Description: WIP - Changed order note to append so any notes entered by the customer will get added to Netsuite Sales Order(s) - WIP
 Author: AMPM LLC
-Version: 0.0.9
+Version: 0.0.10
 Author URI: https://ampmllc.co
 Version History:
 * Version 0.0.1 Baseline
@@ -18,9 +18,15 @@ Version History:
 * Version 0.0.7 Fix Coupon handling on split orders
 * Version 0.0.8 Added order note from BVC Credit Check to order before split (requires AMPM_credit_check plugin)
 * Version 0.0.9 Changed order note to append so any notes entered by the customer will get added to Netsuite Sales Order(s) - WIP
+* Version 0.0.10 Added AMPM Admin submenu and plugin enable/debug settings
 */
 
 defined( 'ABSPATH' ) || exit; // block direct access to plugin PHP files by adding this line at the top of each of them
+
+defined( 'AMPM_ORDER_SPLIT_ENABLED_OPTION' ) || define( 'AMPM_ORDER_SPLIT_ENABLED_OPTION', 'ampm_order_split_enabled' );
+
+require_once __DIR__ . '/includes/bootstrap.php';
+\AMPM\OrderSplit\bootstrap();
 
 include( plugin_dir_path( __FILE__ ) . './includes/debug_class.php');
 include( plugin_dir_path( __FILE__ ) . 'orderSplitClass.php');
@@ -33,7 +39,17 @@ include( plugin_dir_path( __FILE__ ) . 'orderSplitClass.php');
  * @community     https://businessbloomer.com/club/
  */
  
-add_action( 'woocommerce_thankyou', 'AMPM_split_order_after_checkout', 9999 );
+if ( ampm_order_split_is_enabled() ) {
+    add_action( 'woocommerce_thankyou', 'AMPM_split_order_after_checkout', 9999 );
+}
+
+function ampm_order_split_is_enabled() {
+    return in_array(
+        strtolower( (string) get_option( AMPM_ORDER_SPLIT_ENABLED_OPTION, '1' ) ),
+        array( '1', 'true', 'yes', 'on' ),
+        true
+    );
+}
  
 function AMPM_split_order_after_checkout( $order_id ) {
     global $ordersplitlogArray;

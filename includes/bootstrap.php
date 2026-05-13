@@ -15,5 +15,5 @@ require_once __DIR__ . '/admin-page.php';
  */
 function bootstrap(): void {
 	add_action( 'admin_menu', __NAMESPACE__ . '\\register_admin_page' );
+	add_action( 'admin_init', __NAMESPACE__ . '\\register_admin_settings' );
 }
-
