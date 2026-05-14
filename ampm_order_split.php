@@ -6,7 +6,7 @@ Plugin Name: AMPM Order Split
 Plugin URI: https://ampmllc.co
 Description: Splits WooCommerce orders by shipping class after checkout.
 Author: AMPM LLC
-Version: 0.0.11
+Version: 0.0.12
 Author URI: https://ampmllc.co
 Version History:
 * Version 0.0.1 Baseline
@@ -20,10 +20,12 @@ Version History:
 * Version 0.0.9 Changed order note to append so any notes entered by the customer will get added to Netsuite Sales Order(s)
 * Version 0.0.10 Added AMPM Admin submenu and plugin enable/debug settings
 * Version 0.0.11 Cleaned the public plugin description for the production baseline.
+* Version 0.0.12 Standardized AMPM Admin release/version reporting.
 */
 
 defined( 'ABSPATH' ) || exit; // block direct access to plugin PHP files by adding this line at the top of each of them
 
+defined( 'AMPM_ORDER_SPLIT_VERSION' ) || define( 'AMPM_ORDER_SPLIT_VERSION', '0.0.12' );
 defined( 'AMPM_ORDER_SPLIT_ENABLED_OPTION' ) || define( 'AMPM_ORDER_SPLIT_ENABLED_OPTION', 'ampm_order_split_enabled' );
 
 require_once __DIR__ . '/includes/bootstrap.php';
