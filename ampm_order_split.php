@@ -4,9 +4,9 @@
 Name: AMPM Order Split
 Plugin Name: AMPM Order Split
 Plugin URI: https://ampmllc.co
-Description: WIP - Changed order note to append so any notes entered by the customer will get added to Netsuite Sales Order(s) - WIP
+Description: Splits WooCommerce orders by shipping class after checkout.
 Author: AMPM LLC
-Version: 0.0.10
+Version: 0.0.11
 Author URI: https://ampmllc.co
 Version History:
 * Version 0.0.1 Baseline
@@ -17,8 +17,9 @@ Version History:
 * Version 0.0.6 Fixed to handle use case where there is only one shipping class in the order
 * Version 0.0.7 Fix Coupon handling on split orders
 * Version 0.0.8 Added order note from BVC Credit Check to order before split (requires AMPM_credit_check plugin)
-* Version 0.0.9 Changed order note to append so any notes entered by the customer will get added to Netsuite Sales Order(s) - WIP
+* Version 0.0.9 Changed order note to append so any notes entered by the customer will get added to Netsuite Sales Order(s)
 * Version 0.0.10 Added AMPM Admin submenu and plugin enable/debug settings
+* Version 0.0.11 Cleaned the public plugin description for the production baseline.
 */
 
 defined( 'ABSPATH' ) || exit; // block direct access to plugin PHP files by adding this line at the top of each of them
